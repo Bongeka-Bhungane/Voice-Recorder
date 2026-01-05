@@ -1,30 +1,127 @@
-import { View, StyleSheet, FlatList, TextInput, Pressable } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  Pressable,
+  Alert,
+} from "react-native";
 import Header from "./components/Header";
 import RecordingItem from "./components/RecordingItem";
 import { Ionicons } from "@expo/vector-icons";
+import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system/legacy";
 
-const recordings = [
-  {
-    id: "1",
-    title: "Meeting with Bob",
-    date: "2023-10-01",
-    duration: "00:30:15",
-  },
-  {
-    id: "2",
-    title: "Grocery List",
-    date: "2023-10-02",
-    duration: "00:05:20",
-  },
-  {
-    id: "3",
-    title: "Project Ideas",
-    date: "2023-10-03",
-    duration: "00:12:45",
-  },
-];
+import { useEffect, useState } from "react";
+
+type Recording = {
+  id: string;
+  title: string;
+  date: string;
+  duration: string;
+  uri: string;
+};
 
 export default function Index() {
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [search, setSearch] = useState("");
+
+  const RECORDINGS_DIR = FileSystem.documentDirectory + "recordings/";
+
+  useEffect(() => {
+    loadRecordings();
+    return () => {
+      sound && sound.unloadAsync();
+    };
+  }, []);
+
+  // get list of recordings
+  const loadRecordings = async () => {
+    const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
+
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
+        intermediates: true,
+      });
+      return;
+    }
+
+    const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
+
+    const loaded = files.map((file) => ({
+      id: file,
+      title: file.replace(".m4a", ""),
+      uri: RECORDINGS_DIR + file,
+      date: new Date().toLocaleDateString(),
+      duration: "--:--",
+    }));
+
+    setRecordings(loaded.reverse());
+  };
+
+  //new recording
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Microphone permission is required");
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+    } catch (error) {
+      console.error("Start recording error:", error);
+    }
+  };
+
+  // stop recording
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecording(null);
+
+    if (!uri) return;
+
+    const filename = `${Date.now()}.m4a`;
+    const newUri = RECORDINGS_DIR + filename;
+
+    await FileSystem.moveAsync({
+      from: uri,
+      to: newUri,
+    });
+
+    loadRecordings();
+  };
+
+  // Play recording
+  const playRecording = async (uri: string) => {
+    if (sound) {
+      await sound.unloadAsync();
+    }
+
+    const { sound: newSound } = await Audio.Sound.createAsync({ uri });
+    setSound(newSound);
+    await newSound.playAsync();
+  };
+
+  // 🔍 Search filter
+  const filteredRecordings = recordings.filter((rec) =>
+    rec.title.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <View style={styles.container}>
       <Header />
@@ -35,24 +132,30 @@ export default function Index() {
           placeholder="Search recordings"
           placeholderTextColor={"#9e9e9e"}
           style={styles.input}
+          value={search}
+          onChangeText={setSearch}
         />
       </View>
 
       <FlatList
-        data={recordings}
+        data={filteredRecordings}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{ gap: 16, padding: 6, paddingBottom: 100 }}
+        contentContainerStyle={{ gap: 16, padding: 6, paddingBottom: 120 }}
         renderItem={({ item }) => (
           <RecordingItem
             title={item.title}
             date={item.date}
             duration={item.duration}
+            onPlay={() => playRecording(item.uri)}
           />
         )}
       />
 
-      <Pressable style={styles.recordButton}>
-        <Ionicons name="mic" size={26} color="#fff" />
+      <Pressable
+        style={styles.recordButton}
+        onPress={recording ? stopRecording : startRecording}
+      >
+        <Ionicons name={recording ? "stop" : "mic"} size={26} color="#fff" />
       </Pressable>
     </View>
   );
@@ -74,7 +177,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   input: {
-    marginLeft: 10,
     color: "#fff",
     flex: 1,
   },

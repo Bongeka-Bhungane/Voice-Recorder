@@ -6,10 +6,15 @@ type Props = {
   title?: string;
   date?: string;
   duration?: string;
+  onPlay: () => void;
 };
 
-
-export default function RecordingItem({ title, date, duration }: Props) {
+export default function RecordingItem({
+  title,
+  date,
+  duration,
+  onPlay,
+}: Props) {
   return (
     <View style={styles.card}>
       <View>
@@ -19,14 +24,13 @@ export default function RecordingItem({ title, date, duration }: Props) {
 
       <View style={styles.right}>
         <Text style={styles.duration}>{duration}</Text>
-        <Pressable style={styles.playButton}>
+        <Pressable style={styles.playButton} onPress={onPlay}>
           <Ionicons name="play" size={16} color="#000" />
         </Pressable>
       </View>
     </View>
   );
-};
-
+}
 
 const styles = StyleSheet.create({
   card: {
@@ -36,7 +40,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    width: 400,
+    width: "100%",
   },
   title: {
     color: "#fff",
