@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Voice-Recorder",
+    "slug": "Voice-Recorder",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/voice-recoder-icon.jpg",
+    "scheme": "voicerecorder",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/voice-recoder-android-background.jpg",
+        "backgroundImage": "./assets/images/voice-recoder-android-background.jpg",
+        "monochromeImage": "./assets/images/voice-recoder-android-background.jpg"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/voice-recoder-favicon.jpg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/voice-recoder-splash.jpg",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
