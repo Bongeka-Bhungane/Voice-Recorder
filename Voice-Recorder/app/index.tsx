@@ -34,6 +34,9 @@ export default function Index() {
   const [playingUri, setPlayingUri] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [search, setSearch] = useState("");
+  const [playbackSpeeds, setPlaybackSpeeds] = useState<Record<string, number>>(
+    {}
+  );
 
   // rename modal
   const [renameVisible, setRenameVisible] = useState(false);
@@ -57,7 +60,6 @@ export default function Index() {
       return b.createdAt - a.createdAt; // newest → oldest
     });
 
-
   const RECORDINGS_DIR = FileSystem.documentDirectory + "recordings/";
 
   useFocusEffect(
@@ -66,7 +68,6 @@ export default function Index() {
     }, [])
   );
 
-
   const formatDuration = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
     const minutes = Math.floor(totalSeconds / 60);
@@ -74,74 +75,88 @@ export default function Index() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
+  //togle speed play back
+  const cycleSpeed = (uri: string) => {
+    setPlaybackSpeeds((prev) => {
+      const current = prev[uri] ?? 1;
+      const next =
+        current === 0.5 ? 1 : current === 1 ? 1.5 : current === 1.5 ? 2 : 0.5;
+
+      return { ...prev, [uri]: next };
+    });
+  };
+
   // Load existing recordings
 
- const loadRecordings = async () => {
-   const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
-   if (!dirInfo.exists) {
-     await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
-       intermediates: true,
-     });
-     return;
-   }
+  const loadRecordings = async () => {
+    const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
+        intermediates: true,
+      });
+      return;
+    }
 
-   const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
-   const loaded: Recording[] = [];
+    const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
+    const loaded: Recording[] = [];
 
-   // Define type for FileSystem.getInfoAsync with modificationTime
-   type FileInfoWithMod = {
-     exists: boolean;
-     uri: string;
-     isDirectory?: boolean;
-     size?: number;
-     modificationTime?: number; // in seconds
-   };
+    // Define type for FileSystem.getInfoAsync with modificationTime
+    type FileInfoWithMod = {
+      exists: boolean;
+      uri: string;
+      isDirectory?: boolean;
+      size?: number;
+      modificationTime?: number; // in seconds
+    };
 
-   for (const file of files) {
-     const uri = RECORDINGS_DIR + file;
+    for (const file of files) {
+      const uri = RECORDINGS_DIR + file;
 
-     const fileInfo: FileInfoWithMod = (await FileSystem.getInfoAsync(
-       uri
-     )) as FileInfoWithMod;
-     // Convert seconds → milliseconds
-     const createdAt = fileInfo.modificationTime
-       ? fileInfo.modificationTime * 1000
-       : Date.now();
+      const fileInfo: FileInfoWithMod = (await FileSystem.getInfoAsync(
+        uri
+      )) as FileInfoWithMod;
+      // Convert seconds → milliseconds
+      const createdAt = fileInfo.modificationTime
+        ? fileInfo.modificationTime * 1000
+        : Date.now();
 
-     const { sound } = await Audio.Sound.createAsync(
-       { uri },
-       {},
-       undefined,
-       false
-     );
-     const status = await sound.getStatusAsync();
-     await sound.unloadAsync();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        {},
+        undefined,
+        false
+      );
+      const status = await sound.getStatusAsync();
+      await sound.unloadAsync();
 
-     loaded.push({
-       id: file,
-       title: file.replace(".m4a", ""),
-       uri,
-       createdAt,
-       date: new Date(createdAt).toLocaleDateString(),
-       duration:
-         status.isLoaded && status.durationMillis
-           ? formatDuration(status.durationMillis)
-           : "--:--",
-     });
-   }
+      loaded.push({
+        id: file,
+        title: file.replace(".m4a", ""),
+        uri,
+        createdAt,
+        date: new Date(createdAt).toLocaleDateString(),
+        duration:
+          status.isLoaded && status.durationMillis
+            ? formatDuration(status.durationMillis)
+            : "--:--",
+      });
+    }
 
-   // Sort newest first
-   loaded.sort((a, b) => b.createdAt - a.createdAt);
+    // Sort newest first
+    loaded.sort((a, b) => b.createdAt - a.createdAt);
 
-   setRecordings(loaded);
- };
+    setRecordings(loaded);
+  };
 
   const togglePlay = async (uri: string) => {
+    const speed = playbackSpeeds[uri] ?? 1;
+
     if (sound && playingUri === uri) {
       if (isPlaying) {
         await sound.pauseAsync();
         setIsPlaying(false);
       } else {
+        await sound.setRateAsync(speed, true);
         await sound.playAsync();
         setIsPlaying(true);
       }
@@ -151,6 +166,8 @@ export default function Index() {
     if (sound) await sound.unloadAsync();
 
     const { sound: newSound } = await Audio.Sound.createAsync({ uri });
+    await newSound.setRateAsync(speed, true);
+
     setSound(newSound);
     setPlayingUri(uri);
     setIsPlaying(true);
@@ -164,6 +181,7 @@ export default function Index() {
 
     await newSound.playAsync();
   };
+
 
   // Delete Recording
 
@@ -243,7 +261,9 @@ export default function Index() {
             date={item.date}
             duration={item.duration}
             isPlaying={playingUri === item.uri && isPlaying}
+            speed={playbackSpeeds[item.uri] ?? 1}
             onPlay={() => togglePlay(item.uri)}
+            onSpeedChange={() => cycleSpeed(item.uri)}
             onLongPress={() => openOptions(item)}
           />
         )}

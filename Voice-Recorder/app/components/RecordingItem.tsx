@@ -7,8 +7,10 @@ type Props = {
   date?: string;
   duration?: string;
   isPlaying?: boolean;
-  onPlay: () => void;
+  speed?: number;
+  onPlay?: () => void;
   onLongPress?: () => void;
+  onSpeedChange?: () => void;
 };
 
 export default function RecordingItem({
@@ -16,27 +18,41 @@ export default function RecordingItem({
   date,
   duration,
   isPlaying,
+  speed = 1,
   onPlay,
   onLongPress,
+  onSpeedChange,
 }: Props) {
   return (
-    <Pressable onLongPress={onLongPress} delayLongPress={300}>
-      <View style={styles.card}>
-        <View>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.date}>{date}</Text>
-        </View>
+    <Pressable onLongPress={onLongPress} style={styles.card}>
+      <View>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.date}>{date}</Text>
+      </View>
 
-        <View style={styles.right}>
-          <Text style={styles.duration}>{duration}</Text>
+      <View style={styles.right}>
+        <Text style={styles.duration}>{duration}</Text>
+
+        <View style={styles.controls}>
+          {/* Speed */}
+          <Pressable style={styles.speedButton} onPress={onSpeedChange}>
+            <Text style={styles.speedText}>{speed}x</Text>
+          </Pressable>
+
+          {/* Play / Pause */}
           <Pressable style={styles.playButton} onPress={onPlay}>
-            <Ionicons name={isPlaying ? "pause" : "play"} size={16} color="#000" />
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={16}
+              color="#000"
+            />
           </Pressable>
         </View>
       </View>
     </Pressable>
   );
 }
+
 
 const styles = StyleSheet.create({
   card: {
@@ -73,5 +89,21 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
+  },
+  controls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  speedButton: {
+    backgroundColor: "#2e2e2e",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  speedText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
 });
