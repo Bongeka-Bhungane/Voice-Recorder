@@ -9,10 +9,6 @@ const Header = () => {
 
       <View style={styles.icons}>
         <Pressable>
-          <Ionicons name="volume-high-outline" size={22} color="#fff" />
-        </Pressable>
-
-        <Pressable>
           <Ionicons name="menu-outline" size={22} color="#fff" />
         </Pressable>
       </View>

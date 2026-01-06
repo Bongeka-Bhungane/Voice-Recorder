@@ -6,7 +6,8 @@ type Props = {
   title?: string;
   date?: string;
   duration?: string;
-  onPlay: () => void;
+  onPlay?: () => void;
+  onLongPress?: () => void;
 };
 
 export default function RecordingItem({
@@ -14,21 +15,24 @@ export default function RecordingItem({
   date,
   duration,
   onPlay,
+  onLongPress,
 }: Props) {
   return (
-    <View style={styles.card}>
-      <View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.date}>{date}</Text>
-      </View>
+    <Pressable onLongPress={onLongPress} delayLongPress={400}>
+      <View style={styles.card}>
+        <View>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.date}>{date}</Text>
+        </View>
 
-      <View style={styles.right}>
-        <Text style={styles.duration}>{duration}</Text>
-        <Pressable style={styles.playButton} onPress={onPlay}>
-          <Ionicons name="play" size={16} color="#000" />
-        </Pressable>
+        <View style={styles.right}>
+          <Text style={styles.duration}>{duration}</Text>
+          <Pressable style={styles.playButton} onPress={onPlay}>
+            <Ionicons name="play" size={16} color="#000" />
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
