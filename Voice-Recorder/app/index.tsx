@@ -28,9 +28,11 @@ export default function Index() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [playingUri, setPlayingUri] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [search, setSearch] = useState("");
 
-  // rename modal state
+  // rename modal
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameText, setRenameText] = useState("");
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(
@@ -41,13 +43,10 @@ export default function Index() {
 
   useEffect(() => {
     loadRecordings();
-
     return () => {
       sound && sound.unloadAsync();
     };
   }, []);
-
-  /* ---------------- HELPERS ---------------- */
 
   const formatDuration = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
@@ -56,11 +55,10 @@ export default function Index() {
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
-  /* ---------------- LOAD FILES ---------------- */
+  // Load existing recordings
 
   const loadRecordings = async () => {
     const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
-
     if (!dirInfo.exists) {
       await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
         intermediates: true,
@@ -73,14 +71,7 @@ export default function Index() {
 
     for (const file of files) {
       const uri = RECORDINGS_DIR + file;
-
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        {},
-        undefined,
-        false
-      );
-
+      const { sound } = await Audio.Sound.createAsync({ uri });
       const status = await sound.getStatusAsync();
       await sound.unloadAsync();
 
@@ -99,14 +90,11 @@ export default function Index() {
     setRecordings(loaded.reverse());
   };
 
-  /* ---------------- RECORDING ---------------- */
+  //new recording
 
   const startRecording = async () => {
     const permission = await Audio.requestPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Microphone permission required");
-      return;
-    }
+    if (!permission.granted) return;
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -116,37 +104,88 @@ export default function Index() {
     const { recording } = await Audio.Recording.createAsync(
       Audio.RecordingOptionsPresets.HIGH_QUALITY
     );
-
     setRecording(recording);
   };
 
   const stopRecording = async () => {
     if (!recording) return;
-
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
     setRecording(null);
 
     if (!uri) return;
 
-    const filename = `${Date.now()}.m4a`;
-    const newUri = RECORDINGS_DIR + filename;
-
+    const newUri = RECORDINGS_DIR + `${Date.now()}.m4a`;
     await FileSystem.moveAsync({ from: uri, to: newUri });
     loadRecordings();
   };
 
-  /* ---------------- PLAYBACK ---------------- */
+  // Play / Pause Recording
 
-  const playRecording = async (uri: string) => {
+  const togglePlay = async (uri: string) => {
+    if (sound && playingUri === uri) {
+      if (isPlaying) {
+        await sound.pauseAsync();
+        setIsPlaying(false);
+      } else {
+        await sound.playAsync();
+        setIsPlaying(true);
+      }
+      return;
+    }
+
     if (sound) await sound.unloadAsync();
 
     const { sound: newSound } = await Audio.Sound.createAsync({ uri });
     setSound(newSound);
+    setPlayingUri(uri);
+    setIsPlaying(true);
+
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        setIsPlaying(false);
+        setPlayingUri(null);
+      }
+    });
+
     await newSound.playAsync();
   };
 
-  /* ---------------- RENAME ---------------- */
+  // Delete Recording
+
+  const deleteRecording = async (item: Recording) => {
+    Alert.alert(
+      "Delete Recording",
+      "Are you sure you want to delete this recording?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await FileSystem.deleteAsync(item.uri);
+            loadRecordings();
+          },
+        },
+      ]
+    );
+  };
+
+  // Options Modal Handlers
+
+  const openOptions = (item: Recording) => {
+    Alert.alert(item.title, "Choose an action", [
+      { text: "Rename", onPress: () => openRename(item) },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () => deleteRecording(item),
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  // Rename Modal Handlers
 
   const openRename = (item: Recording) => {
     setSelectedRecording(item);
@@ -155,28 +194,19 @@ export default function Index() {
   };
 
   const confirmRename = async () => {
-    if (!selectedRecording || !renameText.trim()) return;
-
-    const safeName = renameText.replace(/[^a-zA-Z0-9-_ ]/g, "");
-    const newUri = RECORDINGS_DIR + safeName + ".m4a";
-
+    if (!selectedRecording) return;
+    const newUri = RECORDINGS_DIR + renameText + ".m4a";
     await FileSystem.moveAsync({
       from: selectedRecording.uri,
       to: newUri,
     });
-
     setRenameVisible(false);
-    setSelectedRecording(null);
     loadRecordings();
   };
 
-  /* ---------------- FILTER ---------------- */
-
-  const filteredRecordings = recordings.filter((rec) =>
-    rec.title.toLowerCase().includes(search.toLowerCase())
+  const filtered = recordings.filter((r) =>
+    r.title.toLowerCase().includes(search.toLowerCase())
   );
-
-  /* ---------------- UI ---------------- */
 
   return (
     <View style={styles.container}>
@@ -185,30 +215,30 @@ export default function Index() {
       <View style={styles.searchBox}>
         <Ionicons name="search" size={20} color="#9e9e9e" />
         <TextInput
+          style={styles.input}
           placeholder="Search recordings"
           placeholderTextColor="#9e9e9e"
-          style={styles.input}
           value={search}
           onChangeText={setSearch}
         />
       </View>
 
       <FlatList
-        data={filteredRecordings}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ gap: 16, padding: 6, paddingBottom: 120 }}
+        data={filtered}
+        keyExtractor={(i) => i.id}
+        contentContainerStyle={{ gap: 16, paddingBottom: 120 }}
         renderItem={({ item }) => (
           <RecordingItem
             title={item.title}
             date={item.date}
             duration={item.duration}
-            onPlay={() => playRecording(item.uri)}
-            onLongPress={() => openRename(item)}
+            isPlaying={playingUri === item.uri && isPlaying}
+            onPlay={() => togglePlay(item.uri)}
+            onLongPress={() => openOptions(item)}
           />
         )}
       />
 
-      {/* RECORD BUTTON */}
       <Pressable
         style={styles.recordButton}
         onPress={recording ? stopRecording : startRecording}
@@ -216,34 +246,19 @@ export default function Index() {
         <Ionicons name={recording ? "stop" : "mic"} size={26} color="#fff" />
       </Pressable>
 
-      {/* RENAME MODAL */}
-      <Modal transparent visible={renameVisible} animationType="fade">
+      {/* Rename Modal */}
+      <Modal transparent visible={renameVisible}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Rename Recording</Text>
-
             <TextInput
+              style={styles.modalInput}
               value={renameText}
               onChangeText={setRenameText}
-              style={styles.modalInput}
-              autoFocus
             />
-
-            <View style={styles.modalActions}>
-              <Pressable
-                style={[styles.modalButton, styles.cancel]}
-                onPress={() => setRenameVisible(false)}
-              >
-                <Text style={styles.modalText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.modalButton, styles.confirm]}
-                onPress={confirmRename}
-              >
-                <Text style={styles.modalText}>Rename</Text>
-              </Pressable>
-            </View>
+            <Pressable style={styles.confirm} onPress={confirmRename}>
+              <Text style={{ color: "#fff" }}>Rename</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -251,7 +266,8 @@ export default function Index() {
   );
 }
 
-/* ---------------- STYLES ---------------- */
+
+//styles
 
 const styles = StyleSheet.create({
   container: {
