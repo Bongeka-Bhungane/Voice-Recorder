@@ -8,13 +8,15 @@ import {
   Modal,
   Text,
 } from "react-native";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
-
+import { useRouter } from "expo-router";
 import Header from "./components/Header";
 import RecordingItem from "./components/RecordingItem";
+import { useFocusEffect } from "@react-navigation/native";
+
 
 type Recording = {
   id: string;
@@ -23,10 +25,10 @@ type Recording = {
   duration: string;
   uri: string;
   createdAt: number;
+  modificationTime?: number;
 };
 
 export default function Index() {
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [playingUri, setPlayingUri] = useState<string | null>(null);
@@ -39,6 +41,8 @@ export default function Index() {
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(
     null
   );
+
+  const router = useRouter();
 
   //filter states
   const [filterVisible, setFilterVisible] = useState(false);
@@ -56,12 +60,12 @@ export default function Index() {
 
   const RECORDINGS_DIR = FileSystem.documentDirectory + "recordings/";
 
-  useEffect(() => {
-    loadRecordings();
-    return () => {
-      sound && sound.unloadAsync();
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadRecordings();
+    }, [])
+  );
+
 
   const formatDuration = (millis: number) => {
     const totalSeconds = Math.floor(millis / 1000);
@@ -72,20 +76,37 @@ export default function Index() {
 
   // Load existing recordings
 
-  const loadRecordings = async () => {
-    const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
-        intermediates: true,
-      });
-      return;
-    }
+ const loadRecordings = async () => {
+   const dirInfo = await FileSystem.getInfoAsync(RECORDINGS_DIR);
+   if (!dirInfo.exists) {
+     await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
+       intermediates: true,
+     });
+     return;
+   }
 
-    const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
-    const loaded: Recording[] = [];
+   const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
+   const loaded: Recording[] = [];
+
+   // Define type for FileSystem.getInfoAsync with modificationTime
+   type FileInfoWithMod = {
+     exists: boolean;
+     uri: string;
+     isDirectory?: boolean;
+     size?: number;
+     modificationTime?: number; // in seconds
+   };
 
    for (const file of files) {
      const uri = RECORDINGS_DIR + file;
+
+     const fileInfo: FileInfoWithMod = (await FileSystem.getInfoAsync(
+       uri
+     )) as FileInfoWithMod;
+     // Convert seconds → milliseconds
+     const createdAt = fileInfo.modificationTime
+       ? fileInfo.modificationTime * 1000
+       : Date.now();
 
      const { sound } = await Audio.Sound.createAsync(
        { uri },
@@ -93,19 +114,12 @@ export default function Index() {
        undefined,
        false
      );
-
      const status = await sound.getStatusAsync();
      await sound.unloadAsync();
 
-     // ✅ SAFE timestamp extraction
-     const rawName = file.replace(".m4a", "");
-     const parsedTimestamp = Number(rawName);
-
-     const createdAt = !isNaN(parsedTimestamp) ? parsedTimestamp : Date.now(); // fallback for renamed files
-
      loaded.push({
        id: file,
-       title: rawName,
+       title: file.replace(".m4a", ""),
        uri,
        createdAt,
        date: new Date(createdAt).toLocaleDateString(),
@@ -116,40 +130,11 @@ export default function Index() {
      });
    }
 
-    setRecordings(loaded.reverse());
-  };
+   // Sort newest first
+   loaded.sort((a, b) => b.createdAt - a.createdAt);
 
-  //new recording
-
-  const startRecording = async () => {
-    const permission = await Audio.requestPermissionsAsync();
-    if (!permission.granted) return;
-
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
-
-    const { recording } = await Audio.Recording.createAsync(
-      Audio.RecordingOptionsPresets.HIGH_QUALITY
-    );
-    setRecording(recording);
-  };
-
-  const stopRecording = async () => {
-    if (!recording) return;
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecording(null);
-
-    if (!uri) return;
-
-    const newUri = RECORDINGS_DIR + `${Date.now()}.m4a`;
-    await FileSystem.moveAsync({ from: uri, to: newUri });
-    loadRecordings();
-  };
-
-  // Play / Pause Recording
+   setRecordings(loaded);
+ };
 
   const togglePlay = async (uri: string) => {
     if (sound && playingUri === uri) {
@@ -233,10 +218,6 @@ export default function Index() {
     loadRecordings();
   };
 
-  const filtered = recordings.filter((r) =>
-    r.title.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
     <View style={styles.container}>
       <Header onFilterPress={() => setFilterVisible(true)} />
@@ -270,9 +251,9 @@ export default function Index() {
 
       <Pressable
         style={styles.recordButton}
-        onPress={recording ? stopRecording : startRecording}
+        onPress={() => router.push("/recordingScreen")}
       >
-        <Ionicons name={recording ? "stop" : "mic"} size={26} color="#fff" />
+        <Ionicons name="mic" size={26} color="#fff" />
       </Pressable>
 
       {/* Rename Modal */}
