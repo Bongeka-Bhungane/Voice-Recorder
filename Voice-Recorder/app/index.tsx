@@ -22,6 +22,7 @@ type Recording = {
   date: string;
   duration: string;
   uri: string;
+  createdAt: number;
 };
 
 export default function Index() {
@@ -38,6 +39,20 @@ export default function Index() {
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(
     null
   );
+
+  //filter states
+  const [filterVisible, setFilterVisible] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const filteredAndSorted = [...recordings]
+    .filter((r) => r.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      if (sortOrder === "asc") {
+        return a.createdAt - b.createdAt; // oldest → newest
+      }
+      return b.createdAt - a.createdAt; // newest → oldest
+    });
+
 
   const RECORDINGS_DIR = FileSystem.documentDirectory + "recordings/";
 
@@ -69,23 +84,37 @@ export default function Index() {
     const files = await FileSystem.readDirectoryAsync(RECORDINGS_DIR);
     const loaded: Recording[] = [];
 
-    for (const file of files) {
-      const uri = RECORDINGS_DIR + file;
-      const { sound } = await Audio.Sound.createAsync({ uri });
-      const status = await sound.getStatusAsync();
-      await sound.unloadAsync();
+   for (const file of files) {
+     const uri = RECORDINGS_DIR + file;
 
-      loaded.push({
-        id: file,
-        title: file.replace(".m4a", ""),
-        uri,
-        date: new Date().toLocaleDateString(),
-        duration:
-          status.isLoaded && status.durationMillis
-            ? formatDuration(status.durationMillis)
-            : "--:--",
-      });
-    }
+     const { sound } = await Audio.Sound.createAsync(
+       { uri },
+       {},
+       undefined,
+       false
+     );
+
+     const status = await sound.getStatusAsync();
+     await sound.unloadAsync();
+
+     // ✅ SAFE timestamp extraction
+     const rawName = file.replace(".m4a", "");
+     const parsedTimestamp = Number(rawName);
+
+     const createdAt = !isNaN(parsedTimestamp) ? parsedTimestamp : Date.now(); // fallback for renamed files
+
+     loaded.push({
+       id: file,
+       title: rawName,
+       uri,
+       createdAt,
+       date: new Date(createdAt).toLocaleDateString(),
+       duration:
+         status.isLoaded && status.durationMillis
+           ? formatDuration(status.durationMillis)
+           : "--:--",
+     });
+   }
 
     setRecordings(loaded.reverse());
   };
@@ -210,7 +239,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <Header />
+      <Header onFilterPress={() => setFilterVisible(true)} />
 
       <View style={styles.searchBox}>
         <Ionicons name="search" size={20} color="#9e9e9e" />
@@ -224,7 +253,7 @@ export default function Index() {
       </View>
 
       <FlatList
-        data={filtered}
+        data={filteredAndSorted}
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ gap: 16, paddingBottom: 120 }}
         renderItem={({ item }) => (
@@ -258,6 +287,50 @@ export default function Index() {
             />
             <Pressable style={styles.confirm} onPress={confirmRename}>
               <Text style={{ color: "#fff" }}>Rename</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Filter Modal */}
+      <Modal transparent visible={filterVisible} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterBox}>
+            <Text style={styles.modalTitle}>Sort by date</Text>
+
+            <Pressable
+              style={[
+                styles.filterOption,
+                sortOrder === "desc" && styles.activeOption,
+              ]}
+              onPress={() => {
+                setSortOrder("desc");
+                setFilterVisible(false);
+              }}
+            >
+              <Ionicons name="arrow-down" size={18} color="#fff" />
+              <Text style={styles.filterText}>Newest first</Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.filterOption,
+                sortOrder === "asc" && styles.activeOption,
+              ]}
+              onPress={() => {
+                setSortOrder("asc");
+                setFilterVisible(false);
+              }}
+            >
+              <Ionicons name="arrow-up" size={18} color="#fff" />
+              <Text style={styles.filterText}>Oldest first</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.cancelFilter}
+              onPress={() => setFilterVisible(false)}
+            >
+              <Text style={{ color: "#9e9e9e" }}>Cancel</Text>
             </Pressable>
           </View>
         </View>
@@ -356,5 +429,31 @@ const styles = StyleSheet.create({
   modalText: {
     color: "#fff",
     fontWeight: "500",
+  },
+  filterBox: {
+    backgroundColor: "#1e1e1e",
+    width: "85%",
+    borderRadius: 16,
+    padding: 20,
+  },
+  filterOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  activeOption: {
+    backgroundColor: "#e53935",
+  },
+  filterText: {
+    color: "#fff",
+    fontSize: 16,
+  },
+  cancelFilter: {
+    marginTop: 18,
+    alignItems: "center",
   },
 });

@@ -2,14 +2,18 @@ import { StyleSheet, Text, View, Pressable } from 'react-native'
 import React from 'react'
 import { Ionicons } from '@expo/vector-icons'
 
-const Header = () => {
+type Props = {
+  onFilterPress?: () => void;
+}
+
+const Header = ({ onFilterPress }: Props) => {
   return (
     <View style={styles.container}>
       <Text style={styles.text}>Recoder</Text>
 
-      <View style={styles.icons}>
-        <Pressable>
-          <Ionicons name="menu-outline" size={22} color="#fff" />
+      <View >
+        <Pressable onPress={onFilterPress}>
+          <Ionicons name="filter-outline" size={22} color="#fff" />
         </Pressable>
       </View>
     </View>
@@ -31,9 +35,5 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "bold",
     color: "white",
-  },
-  icons: {
-    flexDirection: "row",
-    gap: 20,
   },
 });
