@@ -185,12 +185,13 @@ export default function Index() {
     newSound.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
 
-      if (status.durationMillis && status.positionMillis) {
-        setProgressMap((prev) => ({
-          ...prev,
-          [uri]: status.positionMillis / status.durationMillis,
-        }));
-      }
+      const duration = status.durationMillis ?? 0;
+      const position = status.positionMillis ?? 0;
+
+      setProgressMap((prev) => ({
+        ...prev,
+        [uri]: duration > 0 ? position / duration : 0,
+      }));
 
       if (status.didJustFinish) {
         setIsPlaying(false);
@@ -198,6 +199,7 @@ export default function Index() {
         setProgressMap((prev) => ({ ...prev, [uri]: 0 }));
       }
     });
+
 
     await newSound.playAsync();
   };
@@ -309,7 +311,7 @@ export default function Index() {
               onChangeText={setRenameText}
             />
             <Pressable style={styles.confirm} onPress={confirmRename}>
-              <Text style={{ color: "#fff" }}>Rename</Text>
+              <Text style={{ color: "#fff"}}>Rename</Text>
             </Pressable>
           </View>
         </View>
@@ -447,6 +449,11 @@ const styles = StyleSheet.create({
 
   confirm: {
     backgroundColor: "#e53935",
+    width: 260,
+    height: 30,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   modalText: {
