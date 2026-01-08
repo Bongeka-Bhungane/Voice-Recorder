@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
+import { useTheme } from "../context/ThemeContext";
+
 
 type Props = {
   title?: string;
@@ -23,15 +24,21 @@ export default function RecordingItem({
   onLongPress,
   onSpeedChange,
 }: Props) {
+
+    const { colors } = useTheme();
+
   return (
-    <Pressable onLongPress={onLongPress} style={styles.card}>
+    <Pressable
+      onLongPress={onLongPress}
+      style={[styles.card, { backgroundColor: colors.card }]}
+    >
       <View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.date}>{date}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+        <Text style={[styles.date, { color: colors.subText }]}>{date}</Text>
       </View>
 
       <View style={styles.right}>
-        <Text style={styles.duration}>{duration}</Text>
+        <Text style={[styles.date, { color: colors.subText }]}>{duration}</Text>
 
         <View style={styles.controls}>
           {/* Speed */}

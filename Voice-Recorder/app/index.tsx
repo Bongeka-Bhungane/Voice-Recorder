@@ -16,6 +16,8 @@ import { useRouter } from "expo-router";
 import Header from "./components/Header";
 import RecordingItem from "./components/RecordingItem";
 import { useFocusEffect } from "@react-navigation/native";
+import { useTheme } from "./context/ThemeContext";
+
 
 
 type Recording = {
@@ -74,6 +76,11 @@ export default function Index() {
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
+
+  //color theme
+  const { colors } = useTheme();
+
+
 
   //togle speed play back
   const cycleSpeed = (uri: string) => {
@@ -237,13 +244,13 @@ export default function Index() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Header onFilterPress={() => setFilterVisible(true)} />
 
-      <View style={styles.searchBox}>
+      <View style={[styles.searchBox, { backgroundColor: colors.input }]}>
         <Ionicons name="search" size={20} color="#9e9e9e" />
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: colors.text }]}
           placeholder="Search recordings"
           placeholderTextColor="#9e9e9e"
           value={search}
@@ -278,7 +285,7 @@ export default function Index() {
 
       {/* Rename Modal */}
       <Modal transparent visible={renameVisible}>
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.card }]}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Rename Recording</Text>
             <TextInput

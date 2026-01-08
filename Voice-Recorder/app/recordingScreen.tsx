@@ -4,43 +4,32 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import * as FileSystem from "expo-file-system/legacy";
+import { useTheme } from "./context/ThemeContext";
 
 export default function RecordScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  const startTimestampRef = useRef<number>(0);
+  const pauseStartRef = useRef<number | null>(null);
+  const totalPausedRef = useRef<number>(0);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [durationMs, setDurationMs] = useState(0); // displayed timer
-  const startTimeRef = useRef<number>(0); // timestamp when recording started or resumed
-  const pausedTimeRef = useRef<number>(0); // total paused duration
+  const [durationMs, setDurationMs] = useState(0);
 
   const RECORDINGS_DIR = FileSystem.documentDirectory + "recordings/";
-  const animationFrameRef = useRef<number | null>(null);
 
-  // ⏱ SMOOTH TIMER
-  const updateTimer = () => {
-    if (isRecording && !isPaused) {
-      const now = Date.now();
-      setDurationMs(now - startTimeRef.current - pausedTimeRef.current);
-      animationFrameRef.current = requestAnimationFrame(updateTimer);
-    }
-  };
-
-  useEffect(() => {
-    if (isRecording && !isPaused) {
-      animationFrameRef.current = requestAnimationFrame(updateTimer);
-    }
-    return () => {
-      if (animationFrameRef.current)
-        cancelAnimationFrame(animationFrameRef.current);
-    };
-  }, [isRecording, isPaused]);
-
-  // 🎙 START RECORDING
+  // 🎙️ START RECORDING (SAFE)
   const startRecording = async () => {
     const permission = await Audio.requestPermissionsAsync();
-    if (!permission.granted) return;
+    if (!permission.granted) {
+      router.back();
+      return;
+    }
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -52,89 +41,141 @@ export default function RecordScreen() {
     );
 
     recordingRef.current = recording;
-    setIsRecording(true);
-    setIsPaused(false);
+
+    startTimestampRef.current = Date.now();
+    totalPausedRef.current = 0;
+    pauseStartRef.current = null;
+
     setDurationMs(0);
-    pausedTimeRef.current = 0;
-    startTimeRef.current = Date.now();
+    setIsPaused(false);
+    setIsRecording(true);
   };
 
-  // ⏸ PAUSE / RESUME
+  // ⏱️ TIMER LOOP
+  const tick = () => {
+    if (!isRecording || isPaused) return;
+
+    const now = Date.now();
+    const elapsed = now - startTimestampRef.current - totalPausedRef.current;
+
+    setDurationMs(elapsed);
+    animationRef.current = requestAnimationFrame(tick);
+  };
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      animationRef.current = requestAnimationFrame(tick);
+    }
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isRecording, isPaused]);
+
+  // ⏸️ PAUSE / ▶️ RESUME
   const togglePause = async () => {
     if (!recordingRef.current) return;
 
     if (isPaused) {
+      // Resume
       await recordingRef.current.startAsync();
+
+      if (pauseStartRef.current) {
+        totalPausedRef.current += Date.now() - pauseStartRef.current;
+        pauseStartRef.current = null;
+      }
+
       setIsPaused(false);
-      // Adjust paused duration
-      pausedTimeRef.current += Date.now() - pausedTimeRef.current;
-      startTimeRef.current = Date.now() - durationMs; // maintain elapsed time
     } else {
+      // Pause
+      pauseStartRef.current = Date.now();
       await recordingRef.current.pauseAsync();
       setIsPaused(true);
     }
   };
 
-  // ⏹ STOP RECORDING
+  // ⏹️ STOP & SAVE
   const stopRecording = async () => {
     if (!recordingRef.current) return;
+
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
 
     await recordingRef.current.stopAndUnloadAsync();
     const uri = recordingRef.current.getURI();
 
-    if (!uri) return;
+    recordingRef.current = null;
+    setIsRecording(false);
+
+    if (!uri) {
+      router.back();
+      return;
+    }
+
+    await FileSystem.makeDirectoryAsync(RECORDINGS_DIR, {
+      intermediates: true,
+    });
 
     const newUri = RECORDINGS_DIR + `${Date.now()}.m4a`;
     await FileSystem.moveAsync({ from: uri, to: newUri });
 
-    router.back(); // go back, main screen reloads via useFocusEffect
+    router.back();
   };
 
-
-  // FORMAT TIME MM:SS:HS
+  // 🕒 FORMAT TIME
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const hundredths = Math.floor((ms % 1000) / 10);
+
     return `${minutes.toString().padStart(2, "0")}:${seconds
       .toString()
       .padStart(2, "0")}:${hundredths.toString().padStart(2, "0")}`;
   };
 
+  // Auto start on mount
   useEffect(() => {
     startRecording();
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* HEADER */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </Pressable>
-        <Text style={styles.headerText}>Record</Text>
+        <Text style={[styles.headerText, { color: colors.text }]}>Record</Text>
         <View style={{ width: 24 }} />
       </View>
 
       {/* TIMER */}
-      <Text style={styles.timer}>{formatTime(durationMs)}</Text>
-      <Text style={styles.subText}>You can record for several more hours</Text>
+      <Text style={[styles.timer, { color: colors.text }]}>
+        {formatTime(durationMs)}
+      </Text>
+
+      <Text style={[styles.subText, { color: colors.subText }]}>
+        Recording in progress
+      </Text>
 
       {/* CONTROLS */}
       <View style={styles.controls}>
-        <Pressable>
-          <Ionicons name="pricetag-outline" size={26} color="#aaa" />
-          <Text style={styles.controlText}>Tag</Text>
-        </Pressable>
+        <View style={{ width: 40 }} />
 
         <Pressable style={styles.stopButton} onPress={stopRecording}>
           <Ionicons name="stop" size={28} color="#fff" />
         </Pressable>
 
         <Pressable onPress={togglePause}>
-          <Ionicons name={isPaused ? "play" : "pause"} size={26} color="#fff" />
-          <Text style={styles.controlText}>
+          <Ionicons
+            name={isPaused ? "play" : "pause"}
+            size={26}
+            color={colors.accent}
+          />
+          <Text style={[styles.controlText, { color: colors.subText }]}>
             {isPaused ? "Resume" : "Pause"}
           </Text>
         </Pressable>
@@ -144,16 +185,16 @@ export default function RecordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000", paddingTop: 50 },
+  container: { flex: 1, paddingTop: 50 },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
     alignItems: "center",
   },
-  headerText: { color: "#fff", fontSize: 20, fontWeight: "600" },
-  timer: { color: "#fff", fontSize: 48, textAlign: "center", marginTop: 80 },
-  subText: { color: "#9e9e9e", textAlign: "center", marginTop: 10 },
+  headerText: { fontSize: 20, fontWeight: "600" },
+  timer: { fontSize: 48, textAlign: "center", marginTop: 80 },
+  subText: { textAlign: "center", marginTop: 10 },
   controls: {
     position: "absolute",
     bottom: 40,
@@ -171,7 +212,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   controlText: {
-    color: "#9e9e9e",
     fontSize: 12,
     marginTop: 6,
     textAlign: "center",
