@@ -21,6 +21,7 @@ export const darkColors = {
   accent: "#e53935",
   icon: "#fff",
   input: "#373738ff",
+  modal: "#d6cdcdff",
 };
 
 export const lightColors = {

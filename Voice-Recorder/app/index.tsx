@@ -303,8 +303,8 @@ export default function Index() {
       {/* Rename Modal */}
       <Modal transparent visible={renameVisible}>
         <View style={[styles.modalOverlay, { backgroundColor: colors.card }]}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Rename Recording</Text>
+          <View style={[styles.modalBox, { backgroundColor: colors.modal, borderWidth: 1, borderColor: colors.text, boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'}]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Rename Recording</Text>
             <TextInput
               style={styles.modalInput}
               value={renameText}
