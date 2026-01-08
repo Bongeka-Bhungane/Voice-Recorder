@@ -39,6 +39,8 @@ export default function Index() {
   const [playbackSpeeds, setPlaybackSpeeds] = useState<Record<string, number>>(
     {}
   );
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+
 
   // rename modal
   const [renameVisible, setRenameVisible] = useState(false);
@@ -163,14 +165,15 @@ export default function Index() {
         await sound.pauseAsync();
         setIsPlaying(false);
       } else {
-        await sound.setRateAsync(speed, true);
         await sound.playAsync();
         setIsPlaying(true);
       }
       return;
     }
 
-    if (sound) await sound.unloadAsync();
+    if (sound) {
+      await sound.unloadAsync();
+    }
 
     const { sound: newSound } = await Audio.Sound.createAsync({ uri });
     await newSound.setRateAsync(speed, true);
@@ -180,14 +183,25 @@ export default function Index() {
     setIsPlaying(true);
 
     newSound.setOnPlaybackStatusUpdate((status) => {
-      if (status.isLoaded && status.didJustFinish) {
+      if (!status.isLoaded) return;
+
+      if (status.durationMillis && status.positionMillis) {
+        setProgressMap((prev) => ({
+          ...prev,
+          [uri]: status.positionMillis / status.durationMillis,
+        }));
+      }
+
+      if (status.didJustFinish) {
         setIsPlaying(false);
         setPlayingUri(null);
+        setProgressMap((prev) => ({ ...prev, [uri]: 0 }));
       }
     });
 
     await newSound.playAsync();
   };
+
 
 
   // Delete Recording
@@ -269,6 +283,7 @@ export default function Index() {
             duration={item.duration}
             isPlaying={playingUri === item.uri && isPlaying}
             speed={playbackSpeeds[item.uri] ?? 1}
+            progress={progressMap[item.uri] ?? 0}
             onPlay={() => togglePlay(item.uri)}
             onSpeedChange={() => cycleSpeed(item.uri)}
             onLongPress={() => openOptions(item)}
